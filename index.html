@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>شاشة إقامة الصلاة - الظهر والعصر</title>
+    <style>
+        /* الشاشة سوداء تماماً في الوضع الافتراضي */
+        body, html { 
+            background-color: #000; 
+            margin: 0; 
+            padding: 0;
+            height: 100vh; 
+            overflow: hidden; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+        }
+        
+        /* حاوية المحتوى مخفية افتراضياً وتظهر فقط في وقت العمل */
+        #content-container {
+            display: none; 
+            background-image: url('image_5734c0.jpg'); 
+            background-size: cover; 
+            background-position: center; 
+            background-repeat: no-repeat;
+            width: 100vw;
+            height: 100vh;
+            color: #ffffff; 
+        }
+
+        .overlay {
+            background-color: rgba(0, 0, 0, 0.75);
+            width: 100%; height: 100%;
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center;
+            text-align: center;
+        }
+        
+        .clock { font-size: 7vw; font-weight: bold; color: #ffffff; margin-bottom: 5px; direction: ltr; }
+        .date-info { font-size: 1.8vw; color: #ffffff; margin-bottom: 20px; line-height: 1.5; }
+        
+        /* تصميم صناديق أوقات الأذان والإقامة ثنائية اللغة */
+        .times-container {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 20px;
+        }
+        
+        .time-box {
+            background: rgba(0,0,0,0.6); 
+            padding: 15px 30px; 
+            border-radius: 10px; 
+            border: 1px solid #ffffff;
+            text-align: center;
+        }
+        .time-box .ar { font-size: 2.2vw; color: #ffffff; font-weight: bold; }
+        .time-box .en { font-size: 1.5vw; color: #ffffff; direction: ltr; margin-top: 8px; }
+        
+        .prayer-info { margin: 15px 0; color: #ffffff; }
+        .prayer-info .ar { font-size: 3vw; font-weight: bold; }
+        .prayer-info .en { font-size: 2vw; direction: ltr; margin-top: 5px; }
+        
+        .iqamah-timer { margin: 10px 0; min-height: 12vw; }
+        /* العد التنازلي باللون الأصفر فقط */
+        .iqamah-timer .timer-numbers { font-size: 10vw; color: #ffff00; font-weight: bold; direction: ltr; }
+        
+        /* تصميم صندوق الإشعار وقت الصلاة */
+        .praying-alert {
+            display: none; 
+            background-color: rgba(255, 255, 255, 0.15);
+            border: 2px solid #ffffff;
+            border-radius: 15px;
+            padding: 15px 30px;
+            margin-top: 15px;
+        }
+        .praying-alert .msg-ar { font-size: 3.5vw; color: #ffffff; font-weight: bold; line-height: 1.4; }
+        .praying-alert .msg-en { font-size: 2vw; color: #ffffff; direction: ltr; margin-top: 8px; }
+
+        .footer { font-size: 1.2vw; color: #ffffff; position: absolute; bottom: 20px; width: 100%; text-align: center; line-height: 1.6;}
+    </style>
+</head>
+<body>
+
+    <div id="content-container">
+        <div class="overlay">
+            <div class="clock" id="current-time">00:00:00</div>
+            <div class="date-info">
+                <div id="date-ar"></div>
+                <div id="date-en" dir="ltr"></div>
+            </div>
+            
+            <!-- صناديق الأذان والإقامة ثنائية اللغة -->
+            <div class="times-container">
+                <div class="time-box">
+                    <div class="ar" id="adhan-time-ar">وقت الأذان: --:--</div>
+                    <div class="en" id="adhan-time-en">Adhan Time: --:--</div>
+                </div>
+                <div class="time-box">
+                    <div class="ar" id="iqamah-time-ar">وقت الإقامة: --:--</div>
+                    <div class="en" id="iqamah-time-en">Iqamah Time: --:--</div>
+                </div>
+            </div>
+            
+            <div class="prayer-info">
+                <div class="ar" id="prayer-info-ar"></div>
+                <div class="en" id="prayer-info-en"></div>
+            </div>
+            
+            <div class="iqamah-timer">
+                <!-- العداد باللون الأصفر -->
+                <div class="timer-numbers" id="iqamah-timer"></div>
+                
+                <div class="praying-alert" id="praying-alert">
+                    <div class="msg-ar">استووا واعتدلوا..<br>أقيموا الصفوف وأطفئوا الهواتف</div>
+                    <div class="msg-en">Straighten the rows and turn off your phones</div>
+                </div>
+            </div>
+            
+            <div class="footer">
+                الموقع: جبل علي، دبي | تحديث المواقيت يتم تلقائياً<br>
+                <span dir="ltr">Location: Jebel Ali, Dubai | Timings updated automatically</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let schedule = [];
+        const prayerNamesEn = { 'الظهر': 'Dhuhr', 'العصر': 'Asr' };
+
+        function formatTime12(dateObj) {
+            return dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        }
+
+        async function fetchPrayerTimes() {
+            try {
+                const response = await fetch('https://api.aladhan.com/v1/timingsByAddress?address=Jebel+Ali,+Dubai,+UAE&method=8');
+                const data = await response.json();
+                const timings = data.data.timings;
+                
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = now.getMonth();
+                const date = now.getDate();
+
+                function parseTime(timeStr) {
+                    const [h, m] = timeStr.split(':');
+                    return new Date(year, month, date, parseInt(h), parseInt(m), 0);
+                }
+
+                // صلاتي الظهر والعصر فقط
+                schedule = [
+                    { 
+                        name: 'الظهر', adhan: parseTime(timings.Dhuhr), 
+                        iqamah: new Date(year, month, date, 13, 0, 0) // الإقامة 1:00 ظهراً
+                    }, 
+                    { 
+                        name: 'العصر', adhan: parseTime(timings.Asr), 
+                        iqamah: new Date(year, month, date, 16, 30, 0) // الإقامة 4:30 عصراً
+                    }
+                ];
+
+                schedule.forEach(prayer => {
+                    prayer.showTime = new Date(prayer.iqamah.getTime() - (30 * 60000));
+                    prayer.hideTime = new Date(prayer.iqamah.getTime() + (10 * 60000));
+                });
+                
+                document.getElementById('date-ar').innerText = data.data.date.hijri.weekday.ar + " | " + data.data.date.hijri.day + " " + data.data.date.hijri.month.ar + " " + data.data.date.hijri.year;
+                document.getElementById('date-en').innerText = data.data.date.gregorian.weekday.en + " | " + data.data.date.gregorian.day + " " + data.data.date.gregorian.month.en + " " + data.data.date.gregorian.year;
+
+            } catch (error) {
+                console.error("خطأ في الاتصال");
+            }
+        }
+
+        function updateScreen() {
+            const now = new Date();
+            document.getElementById('current-time').innerText = now.toLocaleTimeString('en-US', { hour12: true });
+
+            if (schedule.length === 0) return;
+
+            let activePrayer = null;
+            let currentState = 'BLACK_SCREEN'; 
+            
+            const currentDay = now.getDay();
+
+            // إيقاف العمل يومي الجمعة والسبت
+            if (currentDay !== 5 && currentDay !== 6) {
+                for (let prayer of schedule) {
+                    if (now >= prayer.showTime && now < prayer.hideTime) {
+                        activePrayer = prayer;
+                        currentState = (now < prayer.iqamah) ? 'COUNTDOWN' : 'PRAYING';
+                        break;
+                    }
+                }
+            }
+
+            const container = document.getElementById('content-container');
+
+            if (currentState === 'BLACK_SCREEN') {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'flex';
+            
+            // تحديث نصوص الأذان والإقامة باللغتين
+            const adhanStr = formatTime12(activePrayer.adhan);
+            const iqamahStr = formatTime12(activePrayer.iqamah);
+            const prayerNameEn = prayerNamesEn[activePrayer.name];
+
+            document.getElementById('adhan-time-ar').innerHTML = `وقت أذان ${activePrayer.name}: &nbsp; <span dir="ltr">${adhanStr}</span>`;
+            document.getElementById('adhan-time-en').innerHTML = `${prayerNameEn} Adhan: &nbsp; ${adhanStr}`;
+            
+            document.getElementById('iqamah-time-ar').innerHTML = `وقت إقامة ${activePrayer.name}: &nbsp; <span dir="ltr">${iqamahStr}</span>`;
+            document.getElementById('iqamah-time-en').innerHTML = `${prayerNameEn} Iqamah: &nbsp; ${iqamahStr}`;
+
+            const infoArEl = document.getElementById('prayer-info-ar');
+            const infoEnEl = document.getElementById('prayer-info-en');
+            const timerNumEl = document.getElementById('iqamah-timer');
+            const alertBox = document.getElementById('praying-alert');
+
+            if (currentState === 'COUNTDOWN') {
+                alertBox.style.display = 'none';
+                
+                infoArEl.innerText = `الإقامة لصلاة ${activePrayer.name} بعد:`;
+                infoEnEl.innerText = `Iqamah for ${prayerNameEn} prayer in:`;
+
+                const diff = activePrayer.iqamah - now;
+                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                timerNumEl.innerText = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                
+            } 
+            else if (currentState === 'PRAYING') {
+                alertBox.style.display = 'block'; 
+                
+                infoArEl.innerText = `تقام صلاة ${activePrayer.name} الآن`;
+                infoEnEl.innerText = `${prayerNameEn} prayer is in progress`;
+                
+                timerNumEl.innerText = "00:00"; 
+            }
+        }
+
+        fetchPrayerTimes();
+        setInterval(fetchPrayerTimes, 6 * 60 * 60 * 1000); 
+        setInterval(updateScreen, 1000);
+        
+    </script>
+</body>
+</html>
